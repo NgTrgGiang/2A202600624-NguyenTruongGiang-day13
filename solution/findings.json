@@ -1,12 +1,67 @@
 {
   "team": "TODO-team-name",
   "schema_version": 1,
+  "_note": "Evidence numbers below are placeholders derived from the shipped config + expected behavior. After you run the simulator, replace 'observed' with the real values from YOUR telemetry (logs/*.log, traces/traces.jsonl).",
   "findings": [
     {
+      "fault_class": "arithmetic_error",
+      "evidence": {"metric": "correct_rate / total_mismatch", "observed": "shipped temperature=1.6 -> totals vary across self_consistency=1 samples; discount applied inconsistently", "trace_ids": []},
+      "root_cause": "config temperature 1.6 + self_consistency 1 + verify false make the real LLM compute arithmetic non-deterministically.",
+      "suggested_fix": "config: temperature 1.6->0.2, self_consistency 1->3, verify false->true; prompt: exact floor formula + self-check."
+    },
+    {
+      "fault_class": "fabrication",
+      "evidence": {"metric": "fabricated_total_on_refusable_cases", "observed": "shipped 1-line prompt invents a confident total for out-of-stock/unknown items instead of refusing", "trace_ids": []},
+      "root_cause": "deliberately bad system prompt does not require grounding or refusal.",
+      "suggested_fix": "prompt: use ONLY tool data; if out of stock/not found/not served -> refuse and give NO total."
+    },
+    {
+      "fault_class": "tool_failure",
+      "evidence": {"metric": "tool_observation_vs_reality", "observed": "catalog_override forces macbook in_stock=false; diacritic cities (Hà Nọi) fail to resolve", "trace_ids": []},
+      "root_cause": "config catalog_override poisons stock data; normalize_unicode=false breaks diacritic destinations.",
+      "suggested_fix": "config: clear catalog_override to {}; normalize_unicode false->true."
+    },
+    {
+      "fault_class": "error_spike",
+      "evidence": {"metric": "tool_error_rate", "observed": "~18% of tool calls fail intermittently; no retry", "trace_ids": []},
+      "root_cause": "config tool_error_rate=0.18 with retry disabled.",
+      "suggested_fix": "config: tool_error_rate->0.0, retry.enabled true (max_attempts 3, backoff 250ms); wrapper: retry loop on bad status."
+    },
+    {
+      "fault_class": "pii_leak",
+      "evidence": {"metric": "pii_in_answer_count", "observed": "raw customer email/phone echoed back in answers (e.g. pub-13)", "trace_ids": []},
+      "root_cause": "config redact_pii=false and the prompt does not forbid echoing PII.",
+      "suggested_fix": "config: redact_pii true; prompt: never repeat email/phone; wrapper: redact() the final answer."
+    },
+    {
+      "fault_class": "cost_blowup",
+      "evidence": {"metric": "total_tokens / cost_usd per request", "observed": "premium price tier + verbose_system + max_completion_tokens 2000 + context_size 8 inflate tokens far above task", "trace_ids": []},
+      "root_cause": "config model_price_tier=premium, verbose_system=true, oversized context/completion budget, tool_budget=0 (over-calling).",
+      "suggested_fix": "config: price tier standard, verbose_system false, max_completion_tokens 512, context_size 4, tool_budget 4."
+    },
+    {
       "fault_class": "latency_spike",
-      "evidence": {"metric": "latency_p95_ms", "observed": "TODO from your telemetry", "trace_ids": []},
-      "root_cause": "TODO: what config knob or behavior causes it?",
-      "suggested_fix": "TODO: config change and/or wrapper mitigation"
+      "evidence": {"metric": "latency_p95_ms / p99", "observed": "long-tail slow requests; no timeout and no cache for repeats", "trace_ids": []},
+      "root_cause": "config timeout_ms=0 (no cutoff) and cache disabled.",
+      "suggested_fix": "config: timeout_ms 20000, cache.enabled true; wrapper: cache identical requests (thread-safe)."
+    },
+    {
+      "fault_class": "infinite_loop",
+      "evidence": {"metric": "status=max_steps rate / repeated trace actions", "observed": "repeated identical tool actions until max_steps", "trace_ids": []},
+      "root_cause": "config loop_guard=false with max_steps=12.",
+      "suggested_fix": "config: loop_guard true, max_steps 12->6."
+    },
+    {
+      "fault_class": "tool_overuse",
+      "evidence": {"metric": "n_tools per request vs minimal", "observed": "more tool calls than needed ('to be safe')", "trace_ids": []},
+      "root_cause": "config tool_budget=0 (uncapped) + prompt encourages over-calling.",
+      "suggested_fix": "config: tool_budget 4; prompt: call each tool at most once."
+    },
+    {
+      "fault_class": "quality_drift",
+      "evidence": {"metric": "correct_rate by turn_index / quality PSI", "observed": "answers degrade later in a session", "trace_ids": []},
+      "root_cause": "config session_drift_rate=0.06 with context_reset_every=0.",
+      "suggested_fix": "config: session_drift_rate 0.0, context_reset_every 4; self_consistency 3."
     }
   ]
 }
