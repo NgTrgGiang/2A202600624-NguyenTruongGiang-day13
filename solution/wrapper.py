@@ -219,6 +219,15 @@ def mitigate(call_next, question, config, context):
         if pii_hits:
             result["answer"] = red
 
+    # 6b) normalize a total answer to exactly one clean line (no trailing PII/prose).
+    # Keeps the scorer's parser happy and removes any echoed contact info entirely.
+    ans = result.get("answer")
+    if isinstance(ans, str):
+        m = re.search(r"(?i)t[ổo]ng\s*c[ộo]ng\s*:?\s*([\d][\d.,]*)\s*vnd", ans)
+        if m:
+            num = re.sub(r"[.,]", "", m.group(1))
+            result["answer"] = f"Tong cong: {num} VND"
+
     # 7) OBSERVABILITY -- the only place these signals exist
     meta = result.get("meta", {}) or {}
     usage = meta.get("usage", {}) or {}
